@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Focus · Jyoti</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="nav"></div>
+  <h1 class="page">Focus <small id="date"></small></h1>
+  <p class="intro">Pick a few things, finish them, feel good. Small beats big.</p>
+
+  <section class="card">
+    <h2>Today's focus</h2>
+    <p class="lead" id="count">Try for 3 things or fewer.</p>
+    <div class="row">
+      <input type="text" id="newtask" maxlength="120" placeholder="What's one thing for today?">
+      <button id="addtask" type="button">Add</button>
+    </div>
+    <ul class="list" id="tasks"></ul>
+    <div id="carry"></div>
+  </section>
+
+  <section class="card">
+    <h2>Daily habits</h2>
+    <p class="lead">Last 7 days. Tap a circle to tick it. There are no streaks to protect, just days you showed up.</p>
+    <div id="habits"></div>
+    <div class="row" style="margin-top:14px">
+      <input type="text" id="newhabit" maxlength="40" placeholder="Add a habit, e.g. read 10 pages">
+      <button id="addhabit" type="button" class="alt">Add habit</button>
+    </div>
+  </section>
+
+  <footer><a href="index.html">← back home</a></footer>
+</div>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  J.nav("focus");
+  var key = J.today();
+  var $ = function (id) { return document.getElementById(id); };
+  $("date").textContent = J.pretty(key);
+
+  /* ---------- tasks ---------- */
+  var tasks = J.load("tasks", {});
+  function persist() { J.save("tasks", tasks); }
+
+  function renderTasks() {
+    var ul = $("tasks");
+    ul.innerHTML = "";
+    var L = tasks[key] || [];
+    if (!L.length) {
+      var em = document.createElement("li");
+      em.className = "empty";
+      em.style.cursor = "default";
+      em.textContent = "Nothing yet. Add your first one above.";
+      ul.appendChild(em);
+    }
+    L.forEach(function (t, i) {
+      var li = document.createElement("li");
+      if (t.d) li.className = "done";
+      var box = document.createElement("span"); box.className = "box";
+      var tx = document.createElement("span"); tx.className = "t"; tx.textContent = t.t;
+      var x = document.createElement("button");
+      x.className = "x"; x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Delete task");
+      li.addEventListener("click", function (ev) {
+        t.d = !t.d; persist(); renderTasks();
+        if (t.d) J.spark(ev.clientX, ev.clientY, 6);
+      });
+      x.addEventListener("click", function (ev) {
+        ev.stopPropagation(); L.splice(i, 1); persist(); renderTasks();
+      });
+      li.appendChild(box); li.appendChild(tx); li.appendChild(x);
+      ul.appendChild(li);
+    });
+    var done = L.filter(function (t) { return t.d; }).length;
+    $("count").textContent = !L.length ? "Try for 3 things or fewer."
+      : done === L.length ? "All done for today. Nice. 🎉"
+      : done + " of " + L.length + " done.";
+
+    // carry-over from yesterday
+    var carry = $("carry");
+    carry.innerHTML = "";
+    var mine = L.map(function (t) { return t.t; });
+    var Y = (tasks[J.shift(key, -1)] || []).filter(function (t) { return !t.d && mine.indexOf(t.t) < 0; });
+    if (Y.length) {
+      var p = document.createElement("p");
+      p.className = "note"; p.style.marginTop = "14px";
+      p.textContent = "Unfinished from yesterday (tap to bring over):";
+      carry.appendChild(p);
+      Y.forEach(function (t) {
+        var b = document.createElement("span");
+        b.className = "pill"; b.textContent = "↪ " + t.t;
+        b.addEventListener("click", function () { add(t.t); });
+        carry.appendChild(b);
+      });
+    }
+  }
+  function add(text) {
+    text = text.trim();
+    if (!text) return;
+    (tasks[key] = tasks[key] || []).push({ t: text, d: false });
+    persist(); renderTasks();
+  }
+  $("addtask").addEventListener("click", function () { add($("newtask").value); $("newtask").value = ""; $("newtask").focus(); });
+  $("newtask").addEventListener("keydown", function (e) { if (e.key === "Enter") { add(this.value); this.value = ""; } });
+  renderTasks();
+
+  /* ---------- habits ---------- */
+  var H = J.load("habits", null) || {
+    list: ["Wrote 3 lines", "30 min learning or building", "Moved my body", "Slept on time"],
+    log: {}
+  };
+  function saveH() { J.save("habits", H); }
+
+  function renderHabits() {
+    var wrap = $("habits");
+    wrap.innerHTML = "";
+    var days = [];
+    for (var i = 6; i >= 0; i--) days.push(J.shift(key, -i));
+
+    var head = document.createElement("div");
+    head.className = "habit head";
+    head.innerHTML = "<span></span>" + days.map(function (d) {
+      return "<span>" + J.dt(d).toLocaleDateString(undefined, { weekday: "narrow" }) + "</span>";
+    }).join("") + "<span></span>";
+    wrap.appendChild(head);
+
+    if (!H.list.length) {
+      var em = document.createElement("p");
+      em.className = "empty"; em.textContent = "No habits yet. Add one below.";
+      wrap.appendChild(em);
+    }
+    H.list.forEach(function (name, idx) {
+      var row = document.createElement("div");
+      row.className = "habit";
+      var nm = document.createElement("span");
+      nm.className = "name";
+      var n = days.filter(function (d) { return H.log[d] && H.log[d][name]; }).length;
+      nm.textContent = name + " (" + n + "/7)";
+      row.appendChild(nm);
+      days.forEach(function (d) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "dot" + (H.log[d] && H.log[d][name] ? " on" : "") + (d === key ? " today" : "");
+        b.setAttribute("aria-label", name + " on " + d);
+        b.addEventListener("click", function (ev) {
+          H.log[d] = H.log[d] || {};
+          H.log[d][name] = !H.log[d][name];
+          saveH(); renderHabits();
+          if (H.log[d][name]) J.spark(ev.clientX, ev.clientY, 4);
+        });
+        row.appendChild(b);
+      });
+      var x = document.createElement("button");
+      x.className = "x"; x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Remove habit");
+      x.addEventListener("click", function () {
+        if (confirm("Remove the habit “" + name + "”?")) { H.list.splice(idx, 1); saveH(); renderHabits(); }
+      });
+      row.appendChild(x);
+      wrap.appendChild(row);
+    });
+  }
+  function addHabit() {
+    var v = $("newhabit").value.trim();
+    if (!v || H.list.indexOf(v) >= 0) return;
+    H.list.push(v); saveH(); $("newhabit").value = ""; renderHabits();
+  }
+  $("addhabit").addEventListener("click", addHabit);
+  $("newhabit").addEventListener("keydown", function (e) { if (e.key === "Enter") addHabit(); });
+  renderHabits();
+})();
+</script>
+</body>
+</html>
