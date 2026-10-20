@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Conway's Game of Life: a tiny universe with four simple rules. Draw cells and watch them evolve.">
+<title>Game of Life · Jyoti</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  canvas#life {
+    width: 100%; height: auto; display: block; background: #fffdf6;
+    border: 3px solid var(--ink); border-radius: 16px; touch-action: none; cursor: crosshair;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+  select {
+    font: inherit; padding: 9px 12px; border: 3px solid var(--ink); border-radius: 999px;
+    background: #fff; color: var(--ink); font-weight: bold;
+  }
+  .sliders { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
+  .sliders label { margin: 0; font-weight: normal; display: flex; align-items: center; gap: 8px; }
+  input[type=range] { accent-color: var(--purple); width: 150px; }
+  input[type=checkbox] { accent-color: var(--purple); width: 18px; height: 18px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: .9rem; }
+  .legend span::before {
+    content: ""; display: inline-block; width: 14px; height: 14px; border-radius: 4px;
+    border: 2px solid var(--ink); margin-right: 6px; vertical-align: -2px; background: var(--c);
+  }
+  ol.rules { padding-left: 1.2rem; margin: 6px 0 0; }
+  ol.rules li { margin: 8px 0; }
+  code { background: #f1ecff; padding: 1px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="index.html">← Home</a></nav>
+  <h1 class="page">Game of Life 🧮 <small>A tiny universe with four rules</small></h1>
+
+  <section class="card">
+    <h2>The universe</h2>
+    <p class="lead">Click or drag on the grid to draw cells, then press Play. Press the spacebar to play and pause.</p>
+    <canvas id="life" aria-label="Game of Life grid. Click or drag to toggle cells."></canvas>
+
+    <div class="controls">
+      <button id="play" type="button">▶ Play</button>
+      <button id="step" type="button" class="alt">Step</button>
+      <button id="random" type="button" class="alt">Random</button>
+      <button id="clear" type="button" class="alt">Clear</button>
+      <select id="preset" aria-label="Load a pattern">
+        <option value="">Load a pattern…</option>
+        <option value="gun">Glider gun</option>
+        <option value="glider">Glider</option>
+        <option value="blinker">Blinker</option>
+        <option value="pulsar">Pulsar</option>
+        <option value="rpent">R-pentomino</option>
+      </select>
+    </div>
+
+    <div class="sliders">
+      <label>Speed <input type="range" id="speed" min="1" max="30" value="10"> <span id="speedv">10/sec</span></label>
+      <label><input type="checkbox" id="wrap"> Wrap around the edges</label>
+    </div>
+
+    <div class="stats stat-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
+      <div class="stat"><b id="gen">0</b>generation</div>
+      <div class="stat"><b id="alive">0</b>cells alive</div>
+    </div>
+
+    <div class="legend" aria-label="Colour legend">
+      <span style="--c:#ff6fb1">just born</span>
+      <span style="--c:#2ec4b6">young</span>
+      <span style="--c:#7b5cff">survivor</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>The four rules</h2>
+    <p class="lead">Every cell looks at its 8 neighbours, all at once, every generation:</p>
+    <ol class="rules">
+      <li>A live cell with <b>fewer than 2</b> live neighbours dies (lonely).</li>
+      <li>A live cell with <b>2 or 3</b> live neighbours survives.</li>
+      <li>A live cell with <b>more than 3</b> live neighbours dies (crowded).</li>
+      <li>A dead cell with <b>exactly 3</b> live neighbours is born.</li>
+    </ol>
+    <p>That's the whole thing. Gliders that walk, patterns that blink, even a gun that fires gliders all come out of these four lines. Simple pieces, complex behaviour. That's what "simplifying the complexities" looks like. 🧩</p>
+  </section>
+
+  <section class="card">
+    <h2>Try this</h2>
+    <ol class="rules">
+      <li>Load a <b>Glider</b> and press Play. It walks across the grid by itself.</li>
+      <li>Load the <b>R-pentomino</b>. Just 5 cells, and it goes wild.</li>
+      <li>Load the <b>Glider gun</b> and watch it fire gliders forever. (Wrap-around is off for this one, so the gliders fly away.)</li>
+      <li>Clear the grid and draw your own shape. Can you make something that moves?</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Peek inside 🔧</h2>
+    <p class="lead">When you're ready, open <code>visualizer.html</code> in a text editor and look near the top of the script for these two lines:</p>
+    <p><code>var SURVIVE = [2, 3];</code><br><code>var BORN = [3];</code></p>
+    <p>They are the rules above, written as numbers. Try changing <code>BORN</code> to <code>[3, 6]</code>. That's a real variant called HighLife, and it has a pattern that copies itself. Re-upload the file to GitHub and your change goes live. That's your second commit, and your first real edit.</p>
+  </section>
+
+  <footer><a href="index.html">← back home</a></footer>
+</div>
+
+<script>
+(function () {
+  // The rules. Change these numbers to invent a new universe.
+  var SURVIVE = [2, 3];
+  var BORN = [3];
+
+  var COLS = 56, ROWS = 36, CELL = 16;
+  var cv = document.getElementById("life"), ctx = cv.getContext("2d");
+  cv.width = COLS * CELL;
+  cv.height = ROWS * CELL;
+
+  // Each cell stores its age: 0 = dead, 1 = just born, higher = survived longer.
+  var cur = new Uint8Array(COLS * ROWS), nxt = new Uint8Array(COLS * ROWS);
+  var gen = 0, running = false, wrap = false, speed = 10, last = 0, acc = 0;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var PATTERNS = {
+    gun: { wrap: false, rows: [
+      "........................O...........",
+      "......................O.O...........",
+      "............OO......OO............OO",
+      "...........O...O....OO............OO",
+      "OO........O.....O...OO..............",
+      "OO........O...O.OO....O.O...........",
+      "..........O.....O.......O...........",
+      "...........O...O....................",
+      "............OO......................"
+    ] },
+    glider: { wrap: true, rows: [".O.", "..O", "OOO"] },
+    blinker: { wrap: true, rows: ["OOO"] },
+    pulsar: { wrap: true, rows: [
+      "..OOO...OOO..", ".............",
+      "O....O.O....O", "O....O.O....O", "O....O.O....O",
+      "..OOO...OOO..", ".............",
+      "..OOO...OOO..",
+      "O....O.O....O", "O....O.O....O", "O....O.O....O",
+      ".............", "..OOO...OOO.."
+    ] },
+    rpent: { wrap: true, rows: [".OO", "OO.", ".O."] }
+  };
+
+  // Apply the rules to every cell at once.
+  function step() {
+    for (var y = 0; y < ROWS; y++) {
+      for (var x = 0; x < COLS; x++) {
+        var n = 0;
+        for (var dy = -1; dy <= 1; dy++) {
+          for (var dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            var nx = x + dx, ny = y + dy;
+            if (wrap) { nx = (nx + COLS) % COLS; ny = (ny + ROWS) % ROWS; }
+            else if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+            if (cur[ny * COLS + nx]) n++;
+          }
+        }
+        var i = y * COLS + x;
+        if (cur[i]) nxt[i] = SURVIVE.indexOf(n) >= 0 ? Math.min(cur[i] + 1, 255) : 0;
+        else nxt[i] = BORN.indexOf(n) >= 0 ? 1 : 0;
+      }
+    }
+    var t = cur; cur = nxt; nxt = t;
+    gen++;
+  }
+
+  function draw() {
+    ctx.fillStyle = "#fffdf6";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    var alive = 0;
+    for (var j = 0; j < cur.length; j++) {
+      var a = cur[j];
+      if (a) alive++;
+      ctx.fillStyle = !a ? "#f6f0e0" : a === 1 ? "#ff6fb1" : a <= 5 ? "#2ec4b6" : "#7b5cff";
+      ctx.fillRect((j % COLS) * CELL + 2, Math.floor(j / COLS) * CELL + 2, CELL - 3, CELL - 3);
+    }
+    $("gen").textContent = gen;
+    $("alive").textContent = alive;
+  }
+
+  function clearAll() { cur.fill(0); nxt.fill(0); gen = 0; }
+
+  function load(name) {
+    var p = PATTERNS[name];
+    if (!p) return;
+    clearAll();
+    var h = p.rows.length, w = p.rows[0].length;
+    var ox = Math.floor((COLS - w) / 2), oy = Math.floor((ROWS - h) / 2);
+    p.rows.forEach(function (row, y) {
+      for (var x = 0; x < row.length; x++) if (row[x] === "O") cur[(oy + y) * COLS + ox + x] = 1;
+    });
+    wrap = p.wrap;
+    $("wrap").checked = wrap;
+    draw();
+  }
+
+  // Playing
+  function frame(t) {
+    if (!running) return;
+    if (!last) last = t;
+    acc += t - last; last = t;
+    var interval = 1000 / speed, n = 0;
+    while (acc >= interval && n < 5) { step(); acc -= interval; n++; }
+    if (acc > interval) acc = 0;
+    if (n) draw();
+    requestAnimationFrame(frame);
+  }
+  function setRunning(v) {
+    running = v;
+    $("play").textContent = v ? "⏸ Pause" : "▶ Play";
+    if (v) { last = 0; acc = 0; requestAnimationFrame(frame); }
+  }
+
+  // Drawing with the mouse or finger
+  var painting = false, paintVal = 1;
+  function cellAt(e) {
+    var r = cv.getBoundingClientRect();
+    var x = Math.floor((e.clientX - r.left) / r.width * COLS);
+    var y = Math.floor((e.clientY - r.top) / r.height * ROWS);
+    return (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? -1 : y * COLS + x;
+  }
+  cv.addEventListener("pointerdown", function (e) {
+    var i = cellAt(e);
+    if (i < 0) return;
+    painting = true;
+    paintVal = cur[i] ? 0 : 1;
+    cur[i] = paintVal;
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    draw();
+  });
+  cv.addEventListener("pointermove", function (e) {
+    if (!painting) return;
+    var i = cellAt(e);
+    if (i >= 0 && (cur[i] > 0) !== (paintVal > 0)) { cur[i] = paintVal; draw(); }
+  });
+  function stop() { painting = false; }
+  cv.addEventListener("pointerup", stop);
+  cv.addEventListener("pointercancel", stop);
+
+  // Buttons
+  $("play").addEventListener("click", function () { setRunning(!running); });
+  $("step").addEventListener("click", function () { setRunning(false); step(); draw(); });
+  $("random").addEventListener("click", function () {
+    clearAll();
+    for (var i = 0; i < cur.length; i++) cur[i] = Math.random() < 0.28 ? 1 : 0;
+    draw();
+  });
+  $("clear").addEventListener("click", function () { setRunning(false); clearAll(); draw(); });
+  $("preset").addEventListener("change", function () { if (this.value) { setRunning(false); load(this.value); } });
+  $("speed").addEventListener("input", function () { speed = +this.value; $("speedv").textContent = speed + "/sec"; });
+  $("wrap").addEventListener("change", function () { wrap = this.checked; });
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (e.code === "Space" && tag !== "button" && tag !== "select" && tag !== "input") {
+      e.preventDefault();
+      setRunning(!running);
+    }
+  });
+
+  load("gun");
+})();
+</script>
+</body>
+</html>
